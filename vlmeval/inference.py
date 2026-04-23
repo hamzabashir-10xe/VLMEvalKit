@@ -101,6 +101,18 @@ def infer_data(model, model_name, work_dir, dataset, out_file, verbose=False, ap
     sheet_indices = list(range(rank, len(dataset), world_size))
     lt = len(sheet_indices)
     data = dataset.data.iloc[sheet_indices]
+
+    # ── Fixed 100-sample subset for reproducible benchmarking ──
+    import os as _os
+    _n = int(_os.environ.get('VLMEVAL_SUBSET_N', 0))
+    _seed = int(_os.environ.get('VLMEVAL_SUBSET_SEED', 42))
+    if _n > 0 and len(data) > _n:
+        # data = data.sample(n=_n, random_state=_seed).sort_index()
+        data = data.sample(n=_n, random_state=_seed).sort_index().reset_index(drop=True)
+        lt = len(data)  # ← update lt to match new size
+        print(f'[SUBSET] Using {_n} samples (seed={_seed}) from {dataset.dataset_name}')
+    # ───────────────────────────────────────────────────────────
+
     data_indices = [i for i in data['index']]
 
     # If finished, will exit without building the model
@@ -232,6 +244,13 @@ def infer_data_job(
             data_all.update(load(tmpl.format(i)))
 
         data = dataset.data
+         # ── Apply same subset filter as infer_data ────────────
+        import os as _os
+        _n = int(_os.environ.get('VLMEVAL_SUBSET_N', 0))
+        _seed = int(_os.environ.get('VLMEVAL_SUBSET_SEED', 42))
+        if _n > 0 and len(data) > _n:
+            data = data.sample(n=_n, random_state=_seed).sort_index().reset_index(drop=True)
+        # ──────────────────────────────────────────────────────
         for x in data['index']:
             assert x in data_all
         if os.getenv('SPLIT_THINK', False):

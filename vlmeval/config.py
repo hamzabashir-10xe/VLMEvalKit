@@ -4,6 +4,8 @@ from functools import partial
 
 import vlmeval.api as api
 import vlmeval.vlm as vlm
+from vlmeval.vlm.smolvlm_vmfb import SmolVLMVMFB
+
 
 PandaGPT_ROOT = None
 MiniGPT4_ROOT = None
@@ -1659,6 +1661,7 @@ idefics_series = {
 }
 
 smolvlm_series = {
+    "SmolVLM-500M-VMFB": vlm.SmolVLMVMFB,  
     "SmolVLM-256M": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-256M-Instruct"),
     "SmolVLM-500M": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-500M-Instruct"),
     "SmolVLM": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Instruct"),

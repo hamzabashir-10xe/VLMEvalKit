@@ -79,6 +79,7 @@ from .ross import Ross
 from .sail_vl import SailVL
 from .slime import SliME
 from .smolvlm import SmolVLM, SmolVLM2
+from .smolvlm_vmfb import SmolVLMVMFB
 from .spatial_mllm import SpatialMLLM
 from .thyme import Thyme
 from .transcore_m import TransCoreM
