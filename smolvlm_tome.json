@@ -1,0 +1,16 @@
+{
+    "model": {
+        "SmolVLM-ToMe": {
+            "class": "SmolVLM",
+            "model_path": "HuggingFaceTB/SmolVLM-500M-Instruct",
+            "use_tome": true,
+            "r": 90
+        }
+    },
+    "data": {
+        "MMStar": {
+            "class": "ImageMCQDataset",
+            "dataset": "MMStar"
+        }
+    }
+}

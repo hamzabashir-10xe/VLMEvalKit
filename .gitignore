@@ -171,7 +171,6 @@ data
 # Evaluation Outputs
 outputs/*
 demo.ipynb
-*json
 !vlmeval/dataset/utils/vgrpbench/configs/formating-prompt/**/*.json
 .vscode
 *.swp

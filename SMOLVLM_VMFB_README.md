@@ -11,7 +11,7 @@
 Set in `vlmeval/vlm/smolvlm_vmfb.py`:
 ```python
 SMOLVLM_DIR  = Path("/home/lpt-10xe/Downloads/smolVLM-demo/SmolVLM")
-VMFB_PATH    = SMOLVLM_DIR / "smolvlm-full-500m-working-matmul-fp16-3.vmfb"
+VMFB_PATH    = SMOLVLM_DIR / "smolvlm-full-500m-working-optim-global-img-full-fp32.vmfb"
 WEIGHT_PATHS = [
     SMOLVLM_DIR / "SmolVLM-500M-Instruct-f16.gguf",
     SMOLVLM_DIR / "mmproj-SmolVLM-500M-Instruct-f16.gguf",

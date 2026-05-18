@@ -8,25 +8,175 @@ from ..smp import splitlen
 from .base import BaseModel
 
 
+# ── ToMe (Token Merging) utilities ───────────────────────────────────────────
+
+def _bipartite_soft_matching(metric, r):
+    """Bipartite soft matching on vision tokens. Returns (merge_fn, unmerge_fn)."""
+    t = metric.shape[1]
+    r = min(r, t // 2)
+    if r <= 0:
+        return lambda x, **_: x, lambda x: x
+
+    with torch.no_grad():
+        metric = metric / metric.norm(dim=-1, keepdim=True)
+        a, b = metric[..., ::2, :], metric[..., 1::2, :]
+        scores = a @ b.transpose(-1, -2)
+        node_max, node_idx = scores.max(dim=-1)
+        edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]
+        unm_idx = edge_idx[..., r:, :]
+        src_idx = edge_idx[..., :r, :]
+        dst_idx = node_idx[..., None].gather(dim=-2, index=src_idx)
+
+    def merge(x, mode="mean"):
+        src, dst = x[..., ::2, :], x[..., 1::2, :]
+        n, t1, c = src.shape
+        unm = src.gather(dim=-2, index=unm_idx.expand(n, t1 - r, c))
+        src = src.gather(dim=-2, index=src_idx.expand(n, r, c))
+        dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)
+        return torch.cat([unm, dst], dim=1)
+
+    def unmerge(x):
+        unm_len = unm_idx.shape[1]
+        unm, dst = x[..., :unm_len, :], x[..., unm_len:, :]
+        n, _, c = unm.shape
+        src = dst.gather(dim=-2, index=dst_idx.expand(n, r, c))
+        out = torch.zeros(n, metric.shape[1], c, device=x.device, dtype=x.dtype)
+        out[..., 1::2, :] = dst
+        out.scatter_(dim=-2, index=(2 * unm_idx).expand(n, unm_len, c), src=unm)
+        out.scatter_(dim=-2, index=(2 * src_idx).expand(n, r, c), src=src)
+        return out
+
+    return merge, unmerge
+
+
+def _merge_wavg(merge, x, size=None):
+    """Weighted-average token merge."""
+    if size is None:
+        size = torch.ones_like(x[..., 0, None])
+    x = merge(x * size, mode="sum")
+    size = merge(size, mode="sum")
+    return x / size, size
+
+
+def _apply_tome_patch(vision_model, r: int):
+    """
+    In-place ToMe patch on Idefics3VisionModel.
+    Replaces __class__ of each attention + encoder layer with ToMe variants
+    and registers a forward pre-hook to reset per-forward state.
+    """
+    from transformers.models.idefics3.modeling_idefics3 import (
+        Idefics3VisionAttention,
+        Idefics3EncoderLayer,
+    )
+
+    class _ToMeAttention(Idefics3VisionAttention):
+        def forward(self, hidden_states, attention_mask=None, output_attentions=False, size=None):
+            B, N, C = hidden_states.shape
+            if size is not None:
+                # Proportional attention: bias attention logits by log of token merge count.
+                # size: (B, N, 1) → (B, 1, 1, N) to broadcast over heads and query positions.
+                # The attention_mask is additive (added before softmax), so we piggyback here.
+                size_bias = size.log()[:, None, None, :, 0]
+                attention_mask = size_bias if attention_mask is None else attention_mask + size_bias
+            out = super().forward(
+                hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
+            with torch.no_grad():
+                k = self.k_proj(hidden_states)
+                k = k.reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                self._tome_metric = k.mean(dim=1)  # (B, N, head_dim)
+            return out
+
+    class _ToMeEncoderLayer(Idefics3EncoderLayer):
+        def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+            residual = hidden_states
+            hidden_states = self.layer_norm1(hidden_states)
+            hidden_states, attn_weights = self.self_attn(
+                hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                size=self._tome_info["size"],  # proportional attention
+            )
+            hidden_states = residual + hidden_states
+
+            r_now = self._tome_info["r"].pop(0)
+            if r_now > 0:
+                merge, unmerge = _bipartite_soft_matching(self.self_attn._tome_metric, r_now)
+                hidden_states, self._tome_info["size"] = _merge_wavg(
+                    merge, hidden_states, self._tome_info["size"]
+                )
+                self._tome_info["unmerges"].append(unmerge)
+
+            residual = hidden_states
+            hidden_states = self.layer_norm2(hidden_states)
+            hidden_states = self.mlp(hidden_states)
+            hidden_states = residual + hidden_states
+
+            outputs = (hidden_states,)
+            if output_attentions:
+                outputs += (attn_weights,)
+            return outputs
+
+    num_layers = len(vision_model.encoder.layers)
+    tome_info = {"r": [r] * num_layers, "size": None, "unmerges": []}
+
+    for layer in vision_model.encoder.layers:
+        layer.self_attn.__class__ = _ToMeAttention
+        layer.__class__ = _ToMeEncoderLayer
+        layer._tome_info = tome_info
+
+    def _reset(module, args):
+        module._tome_info["r"] = [r] * num_layers
+        module._tome_info["size"] = None
+        module._tome_info["unmerges"] = []
+
+    def _restore_tokens(module, input, output):
+        from transformers.modeling_outputs import BaseModelOutput
+        x = output.last_hidden_state
+        for unmerge in reversed(tome_info["unmerges"]):
+            x = unmerge(x)
+        return BaseModelOutput(
+            last_hidden_state=x,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
+
+    vision_model._tome_info = tome_info
+    vision_model.register_forward_pre_hook(_reset)
+    vision_model.encoder.register_forward_hook(_restore_tokens)
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 class SmolVLM(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", **kwargs):
+    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", use_tome=False, r=8, **kwargs):
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
         self.processor = AutoProcessor.from_pretrained(model_path)
+        self.processor.image_processor.do_image_splitting = False
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.float32, device_map="cuda"
+            model_path, torch_dtype=torch.float16, device_map="cpu"
         )
-        kwargs_default = {"max_new_tokens": 2048, "use_cache": True}
+        kwargs_default = {"max_new_tokens": 15, "use_cache": True}
         kwargs_default.update(kwargs)
         self.kwargs = kwargs_default
         warnings.warn(
             f"Following kwargs received: {self.kwargs}, will use as generation config."
         )
+        if use_tome:
+            _apply_tome_patch(self.model.model.vision_model, r=r)
+            num_layers = len(self.model.model.vision_model.encoder.layers)
+            warnings.warn(
+                f"ToMe enabled: r={r} (per-layer target, capped at t//2) across {num_layers} layers. "
+                f"Encoder output is restored to full token count before connector."
+            )
         torch.cuda.empty_cache()
 
     def generate_inner(self, message, dataset=None):

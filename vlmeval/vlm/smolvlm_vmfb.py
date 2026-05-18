@@ -37,7 +37,7 @@ TOKENIZER_DIR     = SMOLVLM_DIR / "tokenizer"
 VLM_CONFIG_PATH   = SMOLVLM_DIR / "vlm_config.json"
 
 RUNTIME_DEVICE    = "local-task"
-RUNTIME_THREADS   = 4
+RUNTIME_THREADS   = 8
 RUNTIME_STACK_SIZE = 131072
 # MAX_NEW_TOKENS    = 32          # keep short for benchmark speed
 MAX_NEW_TOKENS    = 5          # for MMStar, which is very short-answer. Adjust as needed for other benchmarks.
@@ -138,6 +138,7 @@ class SmolVLMVMFB(BaseModel):
             },
         )
         self.preprocessor_cfg["do_image_splitting"] = False
+        self.preprocessor_cfg["max_image_size"] = {"longest_edge": 256} 
 
         # ── Load VMFB + weights via IreePagedLLM ─────────────────────────
         self.model = IreePagedLLM(
@@ -155,12 +156,19 @@ class SmolVLMVMFB(BaseModel):
 
     # ── VLMEvalKit interface ──────────────────────────────────────────────────
 
+    PUREMCQ_DATASETS = {
+        "MMStar", "SEEDBench_IMG", "AI2D_TEST", "ScienceQA_VAL", "ScienceQA_TEST",
+    }
+
     def generate_inner(self, message, dataset=None):
         """
         Called by VLMEvalKit for every benchmark sample.
         message format: list of dicts with 'type' and 'value' keys.
         """
-        prompt, image_path = self._parse_message(message)
+        if dataset in self.PUREMCQ_DATASETS:
+            prompt, image_path = self._parse_message_puremcq(message)
+        else:
+            prompt, image_path = self._parse_message(message)
 
         if image_path is None:
             # Text-only fallback (shouldn't happen in MMStar but handle gracefully)
@@ -180,6 +188,30 @@ class SmolVLMVMFB(BaseModel):
                 image_path = item["value"]   # VLMEvalKit gives a file path
             elif item["type"] == "text":
                 texts.append(item["value"])
+
+        prompt = " ".join(texts).strip()
+        return prompt, image_path
+
+    def _parse_message_puremcq(self, message):
+        """MCQ text formatting matching HF SmolVLM's build_prompt_puremcq.
+        Chat template and <image> insertion are handled by e2e_runner's _render_vlm_chat_prompt.
+        """
+        replace_mapping = {
+            "\nOptions:": "\nChoices:",
+            "Please select the correct answer from the options above.": "Answer with the letter.",
+        }
+
+        image_path = None
+        texts = []
+
+        for item in message:
+            if item["type"] == "image":
+                image_path = item["value"]
+            elif item["type"] == "text":
+                text = item["value"].strip()
+                for k, v in replace_mapping.items():
+                    text = text.replace(k, v)
+                texts.append(text)
 
         prompt = " ".join(texts).strip()
         return prompt, image_path
