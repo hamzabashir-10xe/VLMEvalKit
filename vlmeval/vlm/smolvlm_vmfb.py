@@ -30,8 +30,7 @@ SMOLVLM_DIR       = SMOLVLM_DEMO_DIR / "SmolVLM"
 
 VMFB_PATH         = SMOLVLM_DIR / "smolvlm-full-500m-working-matmul-fp16-3.vmfb"
 WEIGHT_PATHS      = [
-    SMOLVLM_DIR / "SmolVLM-500M-Instruct-f16.gguf",
-    SMOLVLM_DIR / "mmproj-SmolVLM-500M-Instruct-f16.gguf",
+    SMOLVLM_DIR / "SmolVLM-merged.irpa",
 ]
 TOKENIZER_DIR     = SMOLVLM_DIR / "tokenizer"
 VLM_CONFIG_PATH   = SMOLVLM_DIR / "vlm_config.json"
@@ -138,7 +137,7 @@ class SmolVLMVMFB(BaseModel):
             },
         )
         self.preprocessor_cfg["do_image_splitting"] = False
-        self.preprocessor_cfg["max_image_size"] = {"longest_edge": 256} 
+        self.preprocessor_cfg["max_image_size"] = {"longest_edge": 512} 
 
         # ── Load VMFB + weights via IreePagedLLM ─────────────────────────
         self.model = IreePagedLLM(

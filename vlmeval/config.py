@@ -1667,6 +1667,8 @@ smolvlm_series = {
     "SmolVLM": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Instruct"),
     "SmolVLM-500M-ToMe": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-500M-Instruct", use_tome=True),
     "SmolVLM-ToMe": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Instruct", use_tome=True),
+    "SmolVLM-500M-Q8": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-500M-Instruct", load_in_8bit=True),
+    "SmolVLM-Q8": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Instruct", load_in_8bit=True),
     "SmolVLM-DPO": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Instruct-DPO"),
     "SmolVLM-Synthetic": partial(vlm.SmolVLM, model_path="HuggingFaceTB/SmolVLM-Synthetic"),
     "SmolVLM2-256M": partial(

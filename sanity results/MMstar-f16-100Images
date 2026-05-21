@@ -1,0 +1,39 @@
+(.venv310) lpt-10xe@lpt-10xe:~/models/VlmEval/VLMEvalKit$ VLMEVAL_SUBSET_N=100 VLMEVAL_SUBSET_SEED=42 python run.py --data MMStar --model SmolVLM-500M
+[2026-05-20 16:29:25] WARNING - vlmeval: --reuse is not set, will not reuse previous (before one day) temporary files
+[2026-05-20 16:29:25] INFO - vlmeval: =========== SmolVLM-500M ===========
+[2026-05-20 16:29:25] INFO - vlmeval: ----------- MMStar -----------
+[SUBSET] Using 100 samples (seed=42) from MMStar
+/home/lpt-10xe/models/VlmEval/VLMEvalKit/vlmeval/vlm/smolvlm.py:177: UserWarning: Following kwargs received: {'max_new_tokens': 15, 'use_cache': True}, will use as generation config.
+  warnings.warn(
+Infer SmolVLM-500M/MMStar, Rank 0/1: 100%|████████████████████████████████████████████████████████████████████████████████| 100/100 [14:59<00:00,  8.99s/it]
+MMStar
+[2026-05-20 16:44:38] INFO - vlmeval: {'nproc': 4, 'verbose': False, 'retry': 3, 'model': 'chatgpt-0125'}
+[2026-05-20 16:44:38] INFO - vlmeval.api.gpt: Using API Base: https://api.openai.com/v1/chat/completions; API Key: 
+/home/lpt-10xe/models/VlmEval/VLMEvalKit/vlmeval/dataset/image_mcq.py:283: UserWarning: OPENAI API is not working properly, will use exact matching for evaluation
+  warnings.warn('OPENAI API is not working properly, will use exact matching for evaluation')
+/home/lpt-10xe/models/VlmEval/VLMEvalKit/vlmeval/dataset/image_mcq.py:284: UserWarning: 
+To debug the OpenAI API, you can try the following scripts in python:
+```python
+from vlmeval.api import OpenAIWrapper
+model = OpenAIWrapper('gpt-4o', verbose=True)
+msgs = [dict(type='text', value='Hello!')]
+code, answer, resp = model.generate_inner(msgs)
+print(code, answer, resp)
+```
+You can see the specific error if the API call fails.
+
+  warnings.warn(DEBUG_MESSAGE)
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 100/100 [00:00<00:00, 2384.06it/s]
+[2026-05-20 16:45:05] INFO - vlmeval: The evaluation of model SmolVLM-500M x dataset MMStar has finished! 
+[2026-05-20 16:45:05] INFO - vlmeval: Evaluation Results:
+[2026-05-20 16:45:05] INFO - vlmeval: 
+-----------------------  -------------------
+split                    none
+Overall                  0.4
+coarse perception        0.6666666666666666
+fine-grained perception  0.4
+instance reasoning       0.26666666666666666
+logical reasoning        0.42857142857142855
+math                     0.2777777777777778
+science & technology     0.4375
+-----------------------  -------------------

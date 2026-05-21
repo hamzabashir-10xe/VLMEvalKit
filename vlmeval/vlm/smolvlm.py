@@ -154,16 +154,23 @@ class SmolVLM(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", use_tome=False, r=8, **kwargs):
+    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", use_tome=False, r=8, load_in_8bit=False, **kwargs):
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
         self.processor = AutoProcessor.from_pretrained(model_path)
         self.processor.image_processor.do_image_splitting = False
-        self.model = Idefics3ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.float16, device_map="cpu"
-        )
+        if load_in_8bit:
+            from transformers import QuantoConfig
+            quantization_config = QuantoConfig(weights="int8")
+            self.model = Idefics3ForConditionalGeneration.from_pretrained(
+                model_path, quantization_config=quantization_config, device_map="cpu"
+            )
+        else:
+            self.model = Idefics3ForConditionalGeneration.from_pretrained(
+                model_path, torch_dtype=torch.float16, device_map="cpu"
+            )
         kwargs_default = {"max_new_tokens": 15, "use_cache": True}
         kwargs_default.update(kwargs)
         self.kwargs = kwargs_default

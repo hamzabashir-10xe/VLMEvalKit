@@ -4,7 +4,7 @@
             "class": "SmolVLM",
             "model_path": "HuggingFaceTB/SmolVLM-500M-Instruct",
             "use_tome": true,
-            "r": 90
+            "r": 80
         }
     },
     "data": {
